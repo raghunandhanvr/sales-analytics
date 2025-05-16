@@ -16,18 +16,22 @@ type Database interface {
 
 type CustomerRepo interface {
 	Upsert(ctx context.Context, customer models.Customer) error
+	BulkUpsert(ctx context.Context, customers []models.Customer) (int, error)
 }
 
 type ProductRepo interface {
 	Upsert(ctx context.Context, product models.Product) error
+	BulkUpsert(ctx context.Context, products []models.Product) (int, error)
 }
 
 type OrderRepo interface {
 	Upsert(ctx context.Context, id, custID string, date time.Time, total float64) error
+	BulkUpsert(ctx context.Context, orderParams []models.Order) (int, error)
 }
 
 type ItemRepo interface {
 	Upsert(ctx context.Context, orderID, prodID string, qty int, price, disc, ship float64) error
+	BulkUpsert(ctx context.Context, itemParams []models.OrderItem) (int, error)
 }
 
 type JobRepository interface {

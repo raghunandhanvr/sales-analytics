@@ -22,25 +22,30 @@ func (s *service) worker(
 		products  int64
 		orders    int64
 		items     int64
+		parseTime int64
+		dbTime    int64
 	},
 	workerID int,
 ) {
 	// track stats for this worker
 	startTime := time.Now()
 	var processed, failed int
+	var parseTime, dbTime time.Duration
 
-	// maintain maps for deduplication
-	seenCustomers := make(map[string]bool)
-	seenProducts := make(map[string]bool)
-	seenOrders := make(map[string]bool)
+	// maintain maps for deduplication - preallocate with capacity
+	seenCustomers := make(map[string]bool, s.batchSize*2)
+	seenProducts := make(map[string]bool, s.batchSize*2)
+	seenOrders := make(map[string]bool, s.batchSize*2)
 
-	// batch accumulation
-	var customerBatch []models.Customer
-	var productBatch []models.Product
-	var orderBatch []Sale
+	// batch accumulation - preallocate with capacity to reduce allocations
+	customerBatch := make([]models.Customer, 0, s.batchSize)
+	productBatch := make([]models.Product, 0, s.batchSize)
+	orderBatch := make([]Sale, 0, s.batchSize)
 
 	// helper to flush batches when they reach the threshold
 	flushBatches := func() {
+		dbStart := time.Now()
+
 		if len(customerBatch) > 0 {
 			count := s.insertCustomerBatch(ctx, customerBatch, jobID, workerID)
 			atomic.AddInt64(&stats.customers, int64(count))
@@ -59,11 +64,18 @@ func (s *service) worker(
 			atomic.AddInt64(&stats.items, int64(items))
 			orderBatch = orderBatch[:0]
 		}
+
+		dbDuration := time.Since(dbStart)
+		dbTime += dbDuration
+		atomic.AddInt64(&stats.dbTime, dbDuration.Nanoseconds())
 	}
 
 	// process rows received from the channel
 	for record := range rows {
+		parseStart := time.Now()
 		sale, err := parseRow(record)
+		parseTime += time.Since(parseStart)
+
 		if err != nil {
 			s.log.Warn("failed to parse row",
 				zap.String("job_id", jobID),
@@ -114,17 +126,35 @@ func (s *service) worker(
 		}
 
 		processed++
+
+		if processed > 0 && processed%50000 == 0 {
+			s.log.Debug("worker progress",
+				zap.String("job_id", jobID),
+				zap.Int("worker_id", workerID),
+				zap.Int("processed_rows", processed),
+				zap.Int("failed_rows", failed),
+				zap.Duration("elapsed", time.Since(startTime)),
+				zap.Duration("parse_time", parseTime),
+				zap.Duration("db_time", dbTime),
+				zap.Float64("rows_per_sec", float64(processed)/time.Since(startTime).Seconds()))
+		}
 	}
 
 	// flush any remaining batches at the end
 	flushBatches()
+
+	atomic.AddInt64(&stats.parseTime, parseTime.Nanoseconds())
 
 	s.log.Info("worker finished",
 		zap.String("job_id", jobID),
 		zap.Int("worker_id", workerID),
 		zap.Int("processed", processed),
 		zap.Int("failed", failed),
-		zap.Duration("duration", time.Since(startTime)))
+		zap.Duration("duration", time.Since(startTime)),
+		zap.Duration("parse_time", parseTime),
+		zap.Duration("db_time", dbTime),
+		zap.Float64("parse_time_pct", float64(parseTime)/float64(time.Since(startTime))*100),
+		zap.Float64("db_time_pct", float64(dbTime)/float64(time.Since(startTime))*100))
 }
 
 // insertCustomerBatch inserts a batch of customers
@@ -150,33 +180,30 @@ func (s *service) insertCustomerBatch(
 	}
 	defer tx.Rollback()
 
-	// insert customers
 	repos := repository.NewIngestionRepo(tx)
-	inserted := 0
-
-	for _, c := range customers {
-		if err := repos.Customers.Upsert(ctx, c); err != nil {
-			s.log.Error("failed to insert customer",
-				zap.String("job_id", jobID),
-				zap.Int("worker_id", workerID),
-				zap.String("id", c.ID),
-				zap.Error(err))
-			continue
-		}
-		inserted++
+	inserted, err := repos.Customers.BulkUpsert(ctx, customers)
+	if err != nil {
+		s.log.Error("failed to bulk insert customers",
+			zap.String("job_id", jobID),
+			zap.Int("worker_id", workerID),
+			zap.Int("batch_size", len(customers)),
+			zap.Error(err))
+		return 0
 	}
 
-	// commit if we inserted anything
-	if inserted > 0 {
-		if err := tx.Commit(); err != nil {
-			s.log.Error("failed to commit transaction",
-				zap.String("job_id", jobID),
-				zap.Int("worker_id", workerID),
-				zap.String("entity", "customer"),
-				zap.Error(err))
-			return 0
-		}
+	if err := tx.Commit(); err != nil {
+		s.log.Error("failed to commit customer transaction",
+			zap.String("job_id", jobID),
+			zap.Int("worker_id", workerID),
+			zap.Error(err))
+		return 0
 	}
+
+	s.log.Debug("bulk inserted customers",
+		zap.String("job_id", jobID),
+		zap.Int("worker_id", workerID),
+		zap.Int("batch_size", len(customers)),
+		zap.Int("inserted", inserted))
 
 	return inserted
 }
@@ -192,7 +219,6 @@ func (s *service) insertProductBatch(
 		return 0
 	}
 
-	// start transaction
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.log.Error("failed to begin transaction",
@@ -204,33 +230,30 @@ func (s *service) insertProductBatch(
 	}
 	defer tx.Rollback()
 
-	// insert products
 	repos := repository.NewIngestionRepo(tx)
-	inserted := 0
-
-	for _, p := range products {
-		if err := repos.Products.Upsert(ctx, p); err != nil {
-			s.log.Error("failed to insert product",
-				zap.String("job_id", jobID),
-				zap.Int("worker_id", workerID),
-				zap.String("id", p.ID),
-				zap.Error(err))
-			continue
-		}
-		inserted++
+	inserted, err := repos.Products.BulkUpsert(ctx, products)
+	if err != nil {
+		s.log.Error("failed to bulk insert products",
+			zap.String("job_id", jobID),
+			zap.Int("worker_id", workerID),
+			zap.Int("batch_size", len(products)),
+			zap.Error(err))
+		return 0
 	}
 
-	// commit if we inserted anything
-	if inserted > 0 {
-		if err := tx.Commit(); err != nil {
-			s.log.Error("failed to commit transaction",
-				zap.String("job_id", jobID),
-				zap.Int("worker_id", workerID),
-				zap.String("entity", "product"),
-				zap.Error(err))
-			return 0
-		}
+	if err := tx.Commit(); err != nil {
+		s.log.Error("failed to commit product transaction",
+			zap.String("job_id", jobID),
+			zap.Int("worker_id", workerID),
+			zap.Error(err))
+		return 0
 	}
+
+	s.log.Debug("bulk inserted products",
+		zap.String("job_id", jobID),
+		zap.Int("worker_id", workerID),
+		zap.Int("batch_size", len(products)),
+		zap.Int("inserted", inserted))
 
 	return inserted
 }
@@ -258,67 +281,76 @@ func (s *service) insertOrderBatch(
 	}
 	defer tx.Rollback()
 
-	// insert orders and items
 	repos := repository.NewIngestionRepo(tx)
-	orderCount := 0
-	itemCount := 0
 
-	// track processed orders for this batch to avoid duplicates
-	processedOrders := make(map[string]bool)
+	uniqueOrders := make(map[string]bool)
+	var orderParams []models.Order
+	var itemParams []models.OrderItem
 
-	// process each sale
 	for _, sale := range sales {
-		// insert order if not already done in this batch
-		if !processedOrders[sale.OrderID] {
-			if err := repos.Orders.Upsert(
-				ctx,
-				sale.OrderID,
-				sale.CustomerID,
-				sale.OrderDate,
-				sale.OrderTotal,
-			); err != nil {
-				s.log.Error("failed to insert order",
-					zap.String("job_id", jobID),
-					zap.Int("worker_id", workerID),
-					zap.String("id", sale.OrderID),
-					zap.Error(err))
-				continue
-			}
-			orderCount++
-			processedOrders[sale.OrderID] = true
+		if !uniqueOrders[sale.OrderID] {
+			uniqueOrders[sale.OrderID] = true
+
+			orderParams = append(orderParams, models.Order{
+				ID:          sale.OrderID,
+				CustomerID:  sale.CustomerID,
+				OrderDate:   sale.OrderDate,
+				TotalAmount: sale.OrderTotal,
+			})
 		}
 
-		// insert order item
-		if err := repos.Items.Upsert(
-			ctx,
-			sale.OrderID,
-			sale.ProductID,
-			sale.Quantity,
-			sale.Price,
-			sale.Discount,
-			sale.Shipping,
-		); err != nil {
-			s.log.Error("failed to insert order item",
-				zap.String("job_id", jobID),
-				zap.Int("worker_id", workerID),
-				zap.String("order_id", sale.OrderID),
-				zap.String("product_id", sale.ProductID),
-				zap.Error(err))
-			continue
-		}
-		itemCount++
+		itemParams = append(itemParams, models.OrderItem{
+			OrderID:      sale.OrderID,
+			ProductID:    sale.ProductID,
+			Quantity:     sale.Quantity,
+			UnitPrice:    sale.Price,
+			Discount:     sale.Discount,
+			ShippingCost: sale.Shipping,
+		})
 	}
 
-	// commit if we inserted anything
-	if orderCount > 0 || itemCount > 0 {
-		if err := tx.Commit(); err != nil {
-			s.log.Error("failed to commit transaction",
+	orderCount := 0
+	if len(orderParams) > 0 {
+		inserted, err := repos.Orders.BulkUpsert(ctx, orderParams)
+		if err != nil {
+			s.log.Error("failed to bulk insert orders",
 				zap.String("job_id", jobID),
 				zap.Int("worker_id", workerID),
-				zap.String("entity", "order"),
+				zap.Int("count", len(orderParams)),
+				zap.Error(err))
+		} else {
+			orderCount = inserted
+		}
+	}
+
+	itemCount := 0
+	if len(itemParams) > 0 {
+		inserted, err := repos.Items.BulkUpsert(ctx, itemParams)
+		if err != nil {
+			s.log.Error("failed to bulk insert order items",
+				zap.String("job_id", jobID),
+				zap.Int("worker_id", workerID),
+				zap.Int("count", len(itemParams)),
+				zap.Error(err))
+		} else {
+			itemCount = inserted
+		}
+	}
+
+	if orderCount > 0 || itemCount > 0 {
+		if err := tx.Commit(); err != nil {
+			s.log.Error("failed to commit order transaction",
+				zap.String("job_id", jobID),
+				zap.Int("worker_id", workerID),
 				zap.Error(err))
 			return 0, 0
 		}
+
+		s.log.Debug("bulk inserted orders and items",
+			zap.String("job_id", jobID),
+			zap.Int("worker_id", workerID),
+			zap.Int("orders", orderCount),
+			zap.Int("items", itemCount))
 	}
 
 	return orderCount, itemCount

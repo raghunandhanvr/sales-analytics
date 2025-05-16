@@ -14,7 +14,7 @@ import (
 
 // csvReader constants
 const (
-	readerBuf = 4 << 20 // 4MB buffer for CSV reading for better performance
+	readerBuf = 8 << 20 // 8MB buffer for CSV reading for better performance
 )
 
 // readCSV reads CSV data and sends rows to the worker pool
@@ -22,13 +22,19 @@ func (s *service) readCSV(ctx context.Context, r io.Reader, rows chan<- []string
 	// use buffered reader for better performance
 	bufReader := bufio.NewReaderSize(r, readerBuf)
 	csvReader := csv.NewReader(bufReader)
-	csvReader.ReuseRecord = true // reuse memory for better performance
+	csvReader.ReuseRecord = true      // reuse memory for better performance
+	csvReader.LazyQuotes = true       // more tolerant parsing
+	csvReader.TrimLeadingSpace = true // clean data as we read
 
-	// track progress
+	// track performance metrics
 	startTime := time.Now()
 	lastLogTime := startTime
 	rowCount := 0
+	parseErrors := 0
+	lastBatchTime := startTime
+	batchSize := 10000
 
+	// Read and discard header row
 	_, err := csvReader.Read()
 	if err != nil {
 		s.log.Error("failed to read csv header", zap.Error(err))
@@ -50,6 +56,7 @@ func (s *service) readCSV(ctx context.Context, r io.Reader, rows chan<- []string
 			break
 		}
 		if err != nil {
+			parseErrors++
 			s.log.Warn("error reading csv line",
 				zap.String("job_id", jobID),
 				zap.Error(err),
@@ -72,20 +79,56 @@ func (s *service) readCSV(ctx context.Context, r io.Reader, rows chan<- []string
 			return rowCount
 		}
 
-		// log progress periodically
-		if rowCount%10000 == 0 || time.Since(lastLogTime) > 5*time.Second {
+		// log progress periodically or after batch
+		if rowCount%batchSize == 0 {
+			now := time.Now()
+			batchDuration := now.Sub(lastBatchTime)
+			rowsPerSecond := float64(batchSize) / batchDuration.Seconds()
+
+			s.log.Info("csv reading batch completed",
+				zap.String("job_id", jobID),
+				zap.Int("rows_read", rowCount),
+				zap.Duration("batch_duration", batchDuration),
+				zap.Float64("rows_per_second", rowsPerSecond),
+				zap.Duration("total_elapsed", time.Since(startTime)))
+
+			lastBatchTime = now
+			lastLogTime = now
+
+			if rowsPerSecond > 10000 && batchSize < 50000 {
+				batchSize *= 2
+				s.log.Debug("increasing progress log batch size",
+					zap.String("job_id", jobID),
+					zap.Int("new_batch_size", batchSize))
+			}
+		} else if time.Since(lastLogTime) > 5*time.Second {
+			elapsedSinceLastLog := time.Since(lastLogTime)
+			rowsSinceLastLog := rowCount % batchSize
+			if rowsSinceLastLog == 0 {
+				rowsSinceLastLog = batchSize
+			}
+			rowsPerSecond := float64(rowsSinceLastLog) / elapsedSinceLastLog.Seconds()
+
 			s.log.Info("csv reading progress",
 				zap.String("job_id", jobID),
 				zap.Int("rows_read", rowCount),
+				zap.Float64("rows_per_second", rowsPerSecond),
 				zap.Duration("elapsed", time.Since(startTime)))
+
 			lastLogTime = time.Now()
 		}
 	}
 
+	duration := time.Since(startTime)
+	rowsPerSecond := float64(rowCount) / duration.Seconds()
+
 	s.log.Info("csv reading completed",
 		zap.String("job_id", jobID),
 		zap.Int("total_rows", rowCount),
-		zap.Duration("duration", time.Since(startTime)))
+		zap.Int("parse_errors", parseErrors),
+		zap.Duration("duration", duration),
+		zap.Float64("rows_per_second", rowsPerSecond),
+		zap.Int("buffer_size", readerBuf))
 
 	return rowCount
 }
@@ -94,12 +137,15 @@ func (s *service) readCSV(ctx context.Context, r io.Reader, rows chan<- []string
 func parseRow(rec []string) (Sale, error) {
 	var s Sale
 
-	// extract basic identifiers
+	if len(rec) < 15 {
+		return s, fmt.Errorf("record has insufficient fields: got %d, need at least 15", len(rec))
+	}
+
+	// extract basic identifiers - use direct indexing for performance
 	s.OrderID = rec[0]
 	s.ProductID = rec[1]
 	s.CustomerID = rec[2]
 
-	// parse string values
 	s.ProductName = rec[3]
 	s.ProductCategory = rec[4]
 	s.Region = rec[5]
@@ -132,14 +178,13 @@ func parseRow(rec []string) (Sale, error) {
 	}
 	s.Shipping = shipping
 
-	// parse date
+	// parse date - this is typically the slowest operation
 	date, err := time.Parse("2006-01-02", rec[6])
 	if err != nil {
 		return s, fmt.Errorf("invalid date: %w", err)
 	}
 	s.OrderDate = date
 
-	// calculate order total
 	s.OrderTotal = float64(s.Quantity)*s.Price*(1-s.Discount) + s.Shipping
 
 	return s, nil
