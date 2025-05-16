@@ -1,22 +1,18 @@
-# Sales-Analytics API
+# Sales Analytics API
 
 High-throughput CSV → MySQL ingestion + analytics in Go.
 
-## API Documentation
-[SwaggerHub Documentation](https://app.swaggerhub.com/apis/freightify-65d/Lumel/1.0)
-
 ![ER Diagram](docs/db/er.png)
 
-## Architecture
-* **Gin** HTTP server (reverse-proxy friendly, high performance)
-* **Google Wire** for compile-time dependency injection
-* **Zap** for structured, JSON logs
-* **Robfig/cron** for scheduled daily refresh
-* **Streaming ingestion with optimized pipeline**  
-  * CSV reader goroutine with 4MB buffer
-  * Worker pool with `N = CPU cores` goroutines
-  * Batch-oriented processing (500 rows/commit)
-  * Back-pressure via buffered channels
+## What It Does
+
+This API handles two main tasks:
+- **Data Ingestion**: Imports CSV sales data into a MySQL database
+- **Analytics**: Provides endpoints to query and analyze the imported data
+
+## API Documentation
+
+The full API is documented on [SwaggerHub](https://app.swaggerhub.com/apis/freightify-65d/Lumel/1.0).
 
 ## Technical Implementation
 * **Dynamic Programming Approach**
@@ -40,7 +36,7 @@ High-throughput CSV → MySQL ingestion + analytics in Go.
 ## Setup
 
 ```bash
-git clone https://github.com/<you>/sales-analytics.git
+git clone https://github.com/raghunandhanvr/sales-analytics.git
 cd sales-analytics
 
 # copy & edit config
@@ -50,7 +46,6 @@ $EDITOR config/config.yaml   # add your MySQL creds, CSV path
 go mod tidy
 go install github.com/google/wire/cmd/wire@latest
 wire ./internal/di           # generate DI code
-```
 
 ### Prerequisites
 | Tool | Version | Purpose |
@@ -59,20 +54,21 @@ wire ./internal/di           # generate DI code
 | MySQL | 8.x | data |
 | (opt) Docker | latest | for swagger-ui |
 
-## Running
+## Running the API
 
 ```bash
-go run ./cmd/server        # default port 8080
+go run ./cmd/server  # Starts on port 8080 by default
 ```
 
-### Upload a CSV
+### Example: Uploading CSV Data
 
 ```bash
 curl -F file=@sample_data.csv http://localhost:8080/api/v1/ingestion/upload
 ```
 
-## Config
-`config/config.yaml.example`
+## Configuration
+
+Example `config/config.yaml`:
 
 ```yaml
 app:
@@ -85,7 +81,7 @@ db:
   port: "3306"
   name: sales_db
 csv:
-  path: /absolute/path/to/sample_data.csv
+  path: /path/to/sample_data.csv
 cron:
   spec: "0 0 * * *"  # daily at midnight
 ```
