@@ -1,0 +1,512 @@
+openapi: "3.0.0"
+info:
+  title: "Sales Analytics API"
+  version: "1.0"
+  description: "API for sales data ingestion and analytics"
+paths:
+  /api/v1/ingestion/upload:
+    post:
+      summary: "Upload CSV data"
+      description: "Upload a CSV file for processing sales data"
+      tags:
+        - "Ingestion"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "CSV file containing sales data"
+                mode:
+                  type: string
+                  enum: [append, overwrite]
+                  default: append
+                  description: "Whether to append data or overwrite existing data"
+      responses:
+        "202":
+          description: "Accepted - Processing started"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    description: "Unique identifier for the ingestion job"
+        "400":
+          description: "Bad Request - No file uploaded or invalid parameters"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingestion/refresh:
+    post:
+      summary: "Refresh data from configured CSV path"
+      description: "Manually trigger import from the system-configured CSV file path"
+      tags:
+        - "Ingestion"
+      parameters:
+        - name: mode
+          in: query
+          required: false
+          description: "Import mode (append or overwrite)"
+          schema:
+            type: string
+            enum: [append, overwrite]
+            default: append
+      responses:
+        "202":
+          description: "Accepted - Processing started"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    description: "Unique identifier for the ingestion job"
+                  message:
+                    type: string
+                    example: "Refresh started"
+                  mode:
+                    type: string
+                    example: "append"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingestion/status/{id}:
+    get:
+      summary: "Check ingestion job status"
+      description: "Get the status of a previously submitted ingestion job"
+      tags:
+        - "Ingestion"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "Job ID returned from upload endpoint"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "OK - Job status retrieved successfully"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatus"
+        "404":
+          description: "Not Found - Job ID not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingestion/cron/status:
+    get:
+      summary: "Get cron job status"
+      description: "Retrieve status and configuration of the scheduled CSV import"
+      tags:
+        - "Cron"
+      responses:
+        "200":
+          description: "OK - Cron status retrieved successfully"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CronStatus"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingestion/cron/trigger:
+    post:
+      summary: "Manually trigger cron job"
+      description: "Manually trigger the scheduled CSV import"
+      tags:
+        - "Cron"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [append, overwrite]
+                  default: append
+                  description: "Whether to append data or overwrite existing data"
+      responses:
+        "202":
+          description: "Accepted - Import job triggered"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    description: "Unique identifier for the triggered job"
+                  message:
+                    type: string
+                    example: "Scheduled import triggered successfully"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/ingestion/cron/configure:
+    put:
+      summary: "Configure cron schedule"
+      description: "Update the cron job configuration and schedule"
+      tags:
+        - "Cron"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: "Whether the cron job is enabled"
+                  default: true
+                schedule:
+                  type: string
+                  description: "Cron expression for schedule (e.g. '0 0 * * *' for daily at midnight)"
+                  example: "0 0 * * *"
+                mode:
+                  type: string
+                  enum: [append, overwrite]
+                  default: append
+                  description: "Default mode for scheduled imports"
+                csv_path:
+                  type: string
+                  description: "Path to the CSV file to import"
+                  example: "/data/sales_data.csv"
+      responses:
+        "200":
+          description: "OK - Configuration updated successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Cron job configuration updated successfully"
+        "400":
+          description: "Bad Request - Invalid configuration"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/analytics/revenue:
+    get:
+      summary: "Get revenue analytics"
+      description: "Retrieve revenue analytics with various breakdowns and filters"
+      tags:
+        - "Analytics"
+      parameters:
+        - name: type
+          in: query
+          description: "Type of revenue calculation"
+          schema:
+            type: string
+            enum: [total, product, category, region, top_products]
+            default: total
+        - name: start_date
+          in: query
+          description: "Start date for the analysis (format: YYYY-MM-DD)"
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: "End date for the analysis (format: YYYY-MM-DD)"
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          description: "Number of results to return (for lists)"
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: "OK - Analytics data retrieved successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    description: "Whether the request was successful"
+                  data:
+                    type: object
+                    oneOf:
+                      - $ref: "#/components/schemas/TotalRevenue"
+                      - $ref: "#/components/schemas/ProductRevenue"
+                      - $ref: "#/components/schemas/CategoryRevenue"
+                      - $ref: "#/components/schemas/RegionRevenue"
+                      - $ref: "#/components/schemas/TopProducts"
+        "400":
+          description: "Bad Request - Invalid parameters"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: "Internal Server Error"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: "Error message"
+
+    JobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+          description: "Unique job identifier"
+        status:
+          type: string
+          enum: [running, completed, failed]
+          description: "Current job status"
+        total_rows:
+          type: integer
+          description: "Total number of rows processed"
+        processed_rows:
+          type: integer
+          description: "Number of rows processed so far"
+        error_message:
+          type: string
+          description: "Error message if job failed"
+        created_at:
+          type: string
+          format: date-time
+          description: "When the job was created"
+        updated_at:
+          type: string
+          format: date-time
+          description: "When the job was last updated"
+
+    CronStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: "Whether the cron job is enabled"
+        schedule:
+          type: string
+          description: "Cron expression for current schedule"
+        last_run:
+          type: string
+          format: date-time
+          description: "When the cron job last ran"
+        next_run:
+          type: string
+          format: date-time
+          description: "When the cron job will run next"
+        csv_path:
+          type: string
+          description: "Path to the CSV file used for import"
+        mode:
+          type: string
+          enum: [append, overwrite]
+          description: "Current import mode"
+        last_job_id:
+          type: string
+          description: "Job ID of the last scheduled import"
+        last_job_status:
+          type: string
+          enum: [running, completed, failed]
+          description: "Status of the last scheduled import"
+
+    Period:
+      type: object
+      properties:
+        start_date:
+          type: string
+          format: date
+          description: "Start date of the analysis period"
+        end_date:
+          type: string
+          format: date
+          description: "End date of the analysis period"
+
+    TotalRevenue:
+      type: object
+      properties:
+        calculation:
+          type: string
+          enum: [total_revenue]
+          description: "Type of calculation"
+        result:
+          type: number
+          format: float
+          description: "Total revenue amount"
+        period:
+          $ref: "#/components/schemas/Period"
+
+    ProductRevenue:
+      type: object
+      properties:
+        calculation:
+          type: string
+          enum: [revenue_by_product]
+          description: "Type of calculation"
+        count:
+          type: integer
+          description: "Number of products returned"
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+                description: "Product identifier"
+              product_name:
+                type: string
+                description: "Product name"
+              revenue:
+                type: number
+                format: float
+                description: "Revenue for this product"
+        period:
+          $ref: "#/components/schemas/Period"
+
+    CategoryRevenue:
+      type: object
+      properties:
+        calculation:
+          type: string
+          enum: [revenue_by_category]
+          description: "Type of calculation"
+        count:
+          type: integer
+          description: "Number of categories returned"
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+                description: "Category name"
+              revenue:
+                type: number
+                format: float
+                description: "Revenue for this category"
+        period:
+          $ref: "#/components/schemas/Period"
+
+    RegionRevenue:
+      type: object
+      properties:
+        calculation:
+          type: string
+          enum: [revenue_by_region]
+          description: "Type of calculation"
+        count:
+          type: integer
+          description: "Number of regions returned"
+        regions:
+          type: array
+          items:
+            type: object
+            properties:
+              region:
+                type: string
+                description: "Region name"
+              revenue:
+                type: number
+                format: float
+                description: "Revenue for this region"
+        period:
+          $ref: "#/components/schemas/Period"
+
+    TopProducts:
+      type: object
+      properties:
+        calculation:
+          type: string
+          enum: [top_products]
+          description: "Type of calculation"
+        count:
+          type: integer
+          description: "Number of products returned"
+        limit:
+          type: integer
+          description: "Requested limit"
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+                description: "Product identifier"
+              product_name:
+                type: string
+                description: "Product name"
+              quantity_sold:
+                type: integer
+                description: "Quantity sold"
+              revenue:
+                type: number
+                format: float
+                description: "Revenue for this product"
+        period:
+          $ref: "#/components/schemas/Period"

@@ -1,0 +1,9 @@
+/bin/
+/vendor/
+*.exe
+*.out
+*.test
+config/config.yaml
+.vscode/
+.DS_Store
+internal/di/wire_gen.go

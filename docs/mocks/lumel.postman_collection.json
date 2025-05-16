@@ -1,0 +1,389 @@
+{
+	"info": {
+		"_postman_id": "4decb7b7-d4bb-4d14-874c-efb3e630d7b5",
+		"name": "Lumel",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "22519588"
+	},
+	"item": [
+		{
+			"name": "Upload CSV",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/Users/raghunandhan/Documents/sales-analytics/sample_data.csv"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/v1/ingestion/upload",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"ingestion",
+						"upload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/ingestion/status/3f9ad985-c843-4893-99f9-b356ba1018dd",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"ingestion",
+						"status",
+						"3f9ad985-c843-4893-99f9-b356ba1018dd"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytics Total",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=total",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "total"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytics Total by date",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=total&start_date=2023-01-01&end_date=2023-12-31",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "total"
+						},
+						{
+							"key": "start_date",
+							"value": "2023-01-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2023-12-31"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Product",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=product",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "product"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Product Date",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=product&start_date=2023-01-01&end_date=2023-12-31",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "product"
+						},
+						{
+							"key": "start_date",
+							"value": "2023-01-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2023-12-31"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Category",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=category",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "category"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Product Date",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=category&start_date=2023-01-01&end_date=2023-12-31",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "category"
+						},
+						{
+							"key": "start_date",
+							"value": "2023-01-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2023-12-31"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Region",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=region",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "region"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytic by Region Date",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=region&start_date=2023-01-01&end_date=2023-12-31",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "region"
+						},
+						{
+							"key": "start_date",
+							"value": "2023-01-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2023-12-31"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytics Top Product",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=top_products",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "top_products"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Analytics Top Product Date",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/analytics/revenue?type=top_products&limit=5&start_date=2023-01-01&end_date=2023-12-31",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"analytics",
+						"revenue"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "top_products"
+						},
+						{
+							"key": "limit",
+							"value": "5"
+						},
+						{
+							"key": "start_date",
+							"value": "2023-01-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2023-12-31"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
