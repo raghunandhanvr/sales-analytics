@@ -110,3 +110,11 @@ internal/
 pkg/orm/           → tiny helper (exec/query wrappers)
 sample_data.csv    → demo file
 ```
+## Is this ready for Production?
+
+No.
+
+- To set this project to production grade, consider having a SQS or any queue mechanism to poll the files
+- Have notification  mechanism on failure
+- Have Authentication/Authorization
+- Have Audit Logs
