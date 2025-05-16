@@ -35,6 +35,19 @@ The full API is documented on [SwaggerHub](https://app.swaggerhub.com/apis/freig
 
 ## Setup
 
+### Prerequisites
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Go | ≥ 1.22 | compile |
+| MySQL | 8.x | data |
+| (opt) Docker | latest | for swagger-ui |
+
+### Setting up the Database
+
+- You can refer the (docs/db/migrations.sql) to create the tables
+
+### Starting the server
+
 ```bash
 git clone https://github.com/raghunandhanvr/sales-analytics.git
 cd sales-analytics
@@ -46,13 +59,6 @@ $EDITOR config/config.yaml   # add your MySQL creds, CSV path
 go mod tidy
 go install github.com/google/wire/cmd/wire@latest
 wire ./internal/di           # generate DI code
-
-### Prerequisites
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Go | ≥ 1.22 | compile |
-| MySQL | 8.x | data |
-| (opt) Docker | latest | for swagger-ui |
 
 ## Running the API
 
